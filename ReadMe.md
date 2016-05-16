@@ -26,7 +26,7 @@ Java Build & Run
 > <project home> $ mvn clean install
 
 ## Running locally
-You should be able to run this locally using mvn, and it should work as expected. We highly recommend you test your services out locally before packaging as Docker containers:
+Startup Fuse in the background so that we have a local A-MQ broker running.  Via the command-line, you should be able to run this project locally using mvn, and it should work as expected:
 
 >  mvn camel:run
 
