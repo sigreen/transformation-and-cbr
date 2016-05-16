@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Configures the Camel Context -->
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.springframework.org/schema/beans        http://www.springframework.org/schema/beans/spring-beans.xsd       http://camel.apache.org/schema/spring       http://camel.apache.org/schema/spring/camel-spring.xsd">
+    <bean class="org.apache.activemq.ActiveMQConnectionFactory" id="connectionFactory">
+        <property name="brokerURL" value="tcp://127.0.0.1:61616"/>
+        <property name="userName" value="admin"/>
+        <property name="password" value="admin"/>
+    </bean>
+    <bean class="org.apache.activemq.camel.component.ActiveMQComponent" id="activemq">
+        <property name="connectionFactory" ref="connectionFactory"/>
+    </bean>
+    <bean class="org.example.utils.UtilsBean" id="UtilsBean"/>
+    <camelContext id="camelContext-26160249-d172-4e93-b6e6-69f35cc2da27" xmlns="http://camel.apache.org/schema/spring">
+        <propertyPlaceholder id="properties" location="routing.properties"/>
+        <endpoint id="person2citizen" uri="dozer:person2citizen?sourceModel=generated.Person&amp;targetModel=generated.Citizen&amp;marshalId=generated&amp;unmarshalId=generated&amp;mappingFile=transformation.xml"/>
+        <dataFormats>
+            <jaxb contextPath="generated" id="generated"/>
+        </dataFormats>
+        <route id="InjectPersonMessage">
+            <from id="_from1" uri="file:src/data?noop=true"/>
+            <to id="_to3" uri="activemq:incoming.person"/>
+        </route>
+        <route id="IncomingPerson">
+            <from id="_from2" uri="activemq:incoming.person"/>
+            <onException id="_onException1" useOriginalMessage="true">
+                <exception>org.apache.camel.ValidationException</exception>
+                <handled>
+                    <constant>true</constant>
+                </handled>
+                <log id="_log3" message="Incoming person XML is invalid.  Error is ${exception.message}. Message contents: ${body}"/>
+                <to id="_to4" uri="activemq:error.person"/>
+            </onException>
+            <to id="_to5" uri="validator:person.xsd"/>
+            <choice id="_choice1">
+                <when id="_when1">
+                    <xpath>/person/city = function:properties('system.one.city')</xpath>
+                    <log id="_log1" message="UK message"/>
+                    <to id="_to1" uri="activemq:system.one"/>
+                </when>
+                <otherwise id="_otherwise1">
+                    <log id="_log2" message="Other message"/>
+                    <to id="_to2" uri="activemq:system.two"/>
+                </otherwise>
+            </choice>
+        </route>
+        <route id="ProcessSystemOne">
+            <from id="_from2" uri="activemq:system.one"/>
+            <setHeader headerName="ssn" id="_setHeader1">
+                <simple>${bean:UtilsBean?method=generateSSN}</simple>
+            </setHeader>
+            <to id="_to6" uri="ref:person2citizen"/>
+            <log id="_log4" message="Here is our freshly baked US citizen: ${body}"/>
+        </route>
+        <route id="ProcessSystemTwo">
+            <from id="_from2" uri="activemq:system.two"/>
+            <log id="_log5" message="Received System Two Message"/>
+        </route>
+    </camelContext>
+</beans>
