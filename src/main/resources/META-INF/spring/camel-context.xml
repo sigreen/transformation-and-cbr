@@ -29,6 +29,9 @@
                     <constant>true</constant>
                 </handled>
                 <log id="_log3" message="Incoming person XML is invalid.  Error is ${exception.message}. Message contents: ${body}"/>
+                <setHeader headerName="errorMessage">
+                	<simple>${exception.message}</simple>
+                </setHeader>
                 <to id="_to4" uri="activemq:error.person"/>
             </onException>
             <to id="_to5" uri="validator:person.xsd"/>
