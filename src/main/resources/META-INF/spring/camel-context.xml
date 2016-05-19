@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Configures the Camel Context -->
 <beans xmlns="http://www.springframework.org/schema/beans"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.springframework.org/schema/beans        http://www.springframework.org/schema/beans/spring-beans.xsd       http://camel.apache.org/schema/spring       http://camel.apache.org/schema/spring/camel-spring.xsd">
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.springframework.org/schema/beans                        http://www.springframework.org/schema/beans/spring-beans.xsd                              http://camel.apache.org/schema/spring                                     http://camel.apache.org/schema/spring/camel-spring.xsd">
+    <!-- A-MQ JMS Bean -->
     <bean class="org.apache.activemq.ActiveMQConnectionFactory" id="connectionFactory">
         <property name="brokerURL" value="tcp://127.0.0.1:61616"/>
         <property name="userName" value="admin"/>
@@ -10,17 +11,64 @@
     <bean class="org.apache.activemq.camel.component.ActiveMQComponent" id="activemq">
         <property name="connectionFactory" ref="connectionFactory"/>
     </bean>
-    <bean class="org.example.utils.UtilsBean" id="UtilsBean"/>
+    <!-- Swap out A-MQ to W-MQ for onsite PoC using customer infrastructure -->
+    <!-- 	<bean id="wmq" class="org.apache.camel.component.jms.JmsComponent"> -->
+    <!-- 		<property name="transacted" value="true" /> -->
+    <!-- 		<property name="connectionFactory"> -->
+    <!-- 			<bean class="com.ibm.mq.jms.MQConnectionFactory"> -->
+    <!-- 				transportType=1 means that a TCP/IP connection is used to connect  -->
+    <!-- 					to the MQ broker. -->
+    <!-- 				<property name="transportType" value="1" /> -->
+    <!-- 				<property name="hostName" value="${wmq.hostname}" /> -->
+    <!-- 				<property name="port" value="${wmq.port}" /> -->
+    <!-- 				<property name="channel" value="${wmq.channel}" /> -->
+    <!-- 				<property name="queueManager" value="${wmq.queuemanager}" /> -->
+    <!-- 			</bean> -->
+    <!-- 		</property> -->
+    <!-- 	</bean> -->
+    <!-- Bean with helper methods for generating a fingerprint or SSN -->
+    <bean class="org.example.utils.UtilsBean" id="UtilsBean">
+        <property name="hmacKey" value="Abcd1234"/>
+    </bean>
+    <!-- Swap-in Oracle instead of Derby during onsite PoC -->
+    <!-- <bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource" 
+		destroy-method="close"> -->
+    <!-- <property name="driverClassName" value="oracle.jdbc.OracleDriver"/> -->
+    <!-- <property name="url" value="jdbc:oracle:thin:@//{{sample1b.jdbc.hostname}}:{{sample1b.jdbc.port}}/{{sample1b.jdbc.sid}}"/> -->
+    <!-- <property name="username" value="{{sample1b.jdbc.username}}"/> -->
+    <!-- <property name="password" value="{{sample1b.jdbc.password}}"/> -->
+    <!-- <property name="maxIdle" value="3"/> -->
+    <!-- <property name="maxActive" value="6"/> -->
+    <!-- </bean> -->
+    <!-- Embedded in-memory DB to demonstrate JDBC -->
+    <bean class="org.apache.commons.dbcp.BasicDataSource"
+        destroy-method="close" id="dataSource">
+        <property name="driverClassName" value="org.apache.derby.jdbc.EmbeddedDriver"/>
+        <property name="url" value="jdbc:derby:memory:orders;create=true"/>
+        <property name="username" value=""/>
+        <property name="password" value=""/>
+    </bean>
+    <bean class="org.apache.camel.component.sql.SqlComponent" id="sql">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+    <!-- bean which creates/destroys the database table for this example -->
+    <bean class="org.jboss.fuse.examples.jdbc.DatabaseBean"
+        destroy-method="destroy" id="initDatabase" init-method="create">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
     <camelContext id="camelContext-26160249-d172-4e93-b6e6-69f35cc2da27" xmlns="http://camel.apache.org/schema/spring">
         <propertyPlaceholder id="properties" location="routing.properties"/>
+        <!-- XML validation and transformation endpoint and dataformat -->
         <endpoint id="person2citizen" uri="dozer:person2citizen?sourceModel=generated.Person&amp;targetModel=generated.Citizen&amp;marshalId=generated&amp;unmarshalId=generated&amp;mappingFile=transformation.xml"/>
         <dataFormats>
             <jaxb contextPath="generated" id="generated"/>
         </dataFormats>
+        <!-- Route to inject test files into JMS -->
         <route id="InjectPersonMessage">
             <from id="_from1" uri="file:src/data?noop=true"/>
             <to id="_to3" uri="activemq:incoming.person"/>
         </route>
+        <!-- Process an incoming person XML record -->
         <route id="IncomingPerson">
             <from id="_from2" uri="activemq:incoming.person"/>
             <onException id="_onException1" useOriginalMessage="true">
@@ -29,35 +77,62 @@
                     <constant>true</constant>
                 </handled>
                 <log id="_log3" message="Incoming person XML is invalid.  Error is ${exception.message}. Message contents: ${body}"/>
-                <setHeader headerName="errorMessage">
-                	<simple>${exception.message}</simple>
+                <setHeader headerName="errorMessage" id="_setHeader2">
+                    <simple>${exception.message}</simple>
                 </setHeader>
                 <to id="_to4" uri="activemq:error.person"/>
             </onException>
             <to id="_to5" uri="validator:person.xsd"/>
+            <setHeader headerName="usCities">
+            	<simple>${properties:system.one.cities}</simple>
+            </setHeader>
+            <setHeader headerName="personCity">
+            	<xpath resultType="java.lang.String">/person/city</xpath>
+            </setHeader>
             <choice id="_choice1">
                 <when id="_when1">
-                    <xpath>/person/city = function:properties('system.one.city')</xpath>
-                    <log id="_log1" message="UK message"/>
+                    <simple>${header.personCity} in ${header.usCities}</simple>
+                    <log id="_log1" message="US Person"/>
                     <to id="_to1" uri="activemq:system.one"/>
                 </when>
                 <otherwise id="_otherwise1">
-                    <log id="_log2" message="Other message"/>
+                    <log id="_log2" message="Alien Person"/>
                     <to id="_to2" uri="activemq:system.two"/>
                 </otherwise>
             </choice>
         </route>
+        <!-- Route to process US persons -->
         <route id="ProcessSystemOne">
             <from id="_from2" uri="activemq:system.one"/>
             <setHeader headerName="ssn" id="_setHeader1">
                 <simple>${bean:UtilsBean?method=generateSSN}</simple>
             </setHeader>
             <to id="_to6" uri="ref:person2citizen"/>
-            <log id="_log4" message="Here is our freshly baked US citizen: ${body}"/>
+            <to id="_to9" uri="activemq:citizen.safestore?exchangePattern=InOut"/>
+            <log id="_log7" message="Response from safestore system: ${body} JMSCorrelationID: ${header.JMSCorrelationID}"/>
         </route>
+        <!-- Route to process Aliens -->
         <route id="ProcessSystemTwo">
-            <from id="_from2" uri="activemq:system.two"/>
+            <from id="_from3" uri="activemq:system.two"/>
             <log id="_log5" message="Received System Two Message"/>
+            <bean id="_bean1" method="calculateFingerprint" ref="UtilsBean"/>
+            <setHeader headerName="aln_name" id="_setHeader3">
+                <xpath resultType="java.lang.String">concat(/person/firstName," ",/person/lastName)</xpath>
+            </setHeader>
+            <to id="_to7" uri="sql:insert INTO alien (aln_id, aln_name, aln_fingerprint) VALUES (next value FOR aln_id,:#aln_name,:#calculatedFingerprint )"/>
+            <to id="_to8" uri="sql:select * from alien"/>
+            <log id="_log6" message="ALIEN TABLE: ${body}"/>
+        </route>
+        <!-- Route to safestore US citizens (and demonstrate JMS request-reply) -->
+        <route id="SafestoreCitizens">
+            <!-- The following JMS call is "fire and forget" to safestore the citizen record -->
+            <from id="_from4" uri="activemq:citizen.safestore"/>
+            <!-- By setting the body below, we are setting the JMS reply payload (for the request-reply call) -->
+            <log id="_log4" message="Here is our freshly baked US citizen: ${body}"/>
+            <to id="_to10" uri="activemq:citizen.vault?exchangePattern=InOnly"/>
+            <setBody id="_setBody1">
+                <constant>US Citizen Safestored.</constant>
+            </setBody>
         </route>
     </camelContext>
 </beans>
