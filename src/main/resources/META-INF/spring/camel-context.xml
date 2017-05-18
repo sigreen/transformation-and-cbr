@@ -3,29 +3,30 @@
 <beans xmlns="http://www.springframework.org/schema/beans"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.springframework.org/schema/beans                        http://www.springframework.org/schema/beans/spring-beans.xsd                              http://camel.apache.org/schema/spring                                     http://camel.apache.org/schema/spring/camel-spring.xsd">
     <!-- A-MQ JMS Bean -->
-    <bean class="org.apache.activemq.ActiveMQConnectionFactory" id="connectionFactory">
-        <property name="brokerURL" value="tcp://127.0.0.1:61616"/>
-        <property name="userName" value="admin"/>
-        <property name="password" value="admin"/>
+    <bean
+        class="org.apache.camel.spring.spi.BridgePropertyPlaceholderConfigurer" id="bridgePropertyPlaceholder">
+        <property name="location" value="amq.properties"/>
+    </bean>
+    <!-- Discovers the ActiveMQ service dynamically -->
+    <bean class="org.apache.activemq.ActiveMQConnectionFactory" id="jmsConnectionFactory">
+        <property name="brokerURL" value="${activemq.broker.url}"/>
+        <property name="userName" value="${activemq.broker.username:#null}"/>
+        <property name="password" value="${activemq.broker.password:#null}"/>
+    </bean>
+    <bean class="org.apache.activemq.pool.PooledConnectionFactory"
+        destroy-method="stop" id="pooledConnectionFactory"
+        init-method="start" primary="true">
+        <property name="maxConnections" value="${activemq.pool.max.connections}"/>
+        <property name="connectionFactory" ref="jmsConnectionFactory"/>
+    </bean>
+    <bean
+        class="org.apache.activemq.camel.component.ActiveMQConfiguration" id="jmsConfig">
+        <property name="connectionFactory" ref="pooledConnectionFactory"/>
+        <property name="concurrentConsumers" value="${activemq.concurrent.consumers}"/>
     </bean>
     <bean class="org.apache.activemq.camel.component.ActiveMQComponent" id="activemq">
-        <property name="connectionFactory" ref="connectionFactory"/>
+        <property name="configuration" ref="jmsConfig"/>
     </bean>
-    <!-- Swap out A-MQ to W-MQ for onsite PoC using customer infrastructure -->
-    <!-- 	<bean id="wmq" class="org.apache.camel.component.jms.JmsComponent"> -->
-    <!-- 		<property name="transacted" value="true" /> -->
-    <!-- 		<property name="connectionFactory"> -->
-    <!-- 			<bean class="com.ibm.mq.jms.MQConnectionFactory"> -->
-    <!-- 				transportType=1 means that a TCP/IP connection is used to connect  -->
-    <!-- 					to the MQ broker. -->
-    <!-- 				<property name="transportType" value="1" /> -->
-    <!-- 				<property name="hostName" value="${wmq.hostname}" /> -->
-    <!-- 				<property name="port" value="${wmq.port}" /> -->
-    <!-- 				<property name="channel" value="${wmq.channel}" /> -->
-    <!-- 				<property name="queueManager" value="${wmq.queuemanager}" /> -->
-    <!-- 			</bean> -->
-    <!-- 		</property> -->
-    <!-- 	</bean> -->
     <!-- Bean with helper methods for generating a fingerprint or SSN -->
     <bean class="org.example.utils.UtilsBean" id="UtilsBean">
         <property name="hmacKey" value="Abcd1234"/>
@@ -83,11 +84,11 @@
                 <to id="_to4" uri="activemq:error.person"/>
             </onException>
             <to id="_to5" uri="validator:person.xsd"/>
-            <setHeader headerName="usCities">
-            	<simple>${properties:system.one.cities}</simple>
+            <setHeader headerName="usCities" id="_setHeader4">
+                <simple>${properties:system.one.cities}</simple>
             </setHeader>
-            <setHeader headerName="personCity">
-            	<xpath resultType="java.lang.String">/person/city</xpath>
+            <setHeader headerName="personCity" id="_setHeader5">
+                <xpath resultType="java.lang.String">/person/city</xpath>
             </setHeader>
             <choice id="_choice1">
                 <when id="_when1">
@@ -125,9 +126,11 @@
         </route>
         <!-- Route to safestore US citizens (and demonstrate JMS request-reply) -->
         <route id="SafestoreCitizens">
-            <!-- The following JMS call is "fire and forget" to safestore the citizen record -->
+            <!-- The following JMS call is "fire and forget" to safestore the citizen 
+				record -->
+            <!-- By setting the body below, we are setting the JMS reply payload (for 
+				the request-reply call) -->
             <from id="_from4" uri="activemq:citizen.safestore"/>
-            <!-- By setting the body below, we are setting the JMS reply payload (for the request-reply call) -->
             <log id="_log4" message="Here is our freshly baked US citizen: ${body}"/>
             <to id="_to10" uri="activemq:citizen.vault?exchangePattern=InOnly"/>
             <setBody id="_setBody1">
