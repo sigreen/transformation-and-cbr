@@ -2,27 +2,19 @@
 <!-- Configures the Camel Context -->
 <beans xmlns="http://www.springframework.org/schema/beans"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.springframework.org/schema/beans                        http://www.springframework.org/schema/beans/spring-beans.xsd                              http://camel.apache.org/schema/spring                                     http://camel.apache.org/schema/spring/camel-spring.xsd">
-    <!-- A-MQ JMS Bean -->
-    <bean
-        class="org.apache.camel.spring.spi.BridgePropertyPlaceholderConfigurer" id="bridgePropertyPlaceholder">
-        <property name="location" value="amq.properties"/>
-    </bean>
     <!-- Discovers the ActiveMQ service dynamically -->
-    <bean class="org.apache.activemq.ActiveMQConnectionFactory" id="jmsConnectionFactory">
+    <bean class="org.apache.activemq.ActiveMQSslConnectionFactory" id="jmsSslConnectionFactory">
         <property name="brokerURL" value="${activemq.broker.url}"/>
-        <property name="userName" value="${activemq.broker.username:#null}"/>
-        <property name="password" value="${activemq.broker.password:#null}"/>
+        <property name="userName" value="${activemq.broker.username}"/>
+        <property name="password" value="${activemq.broker.password}"/>
+        <property name="keyStore" value="${activemq.broker.keystore}"/>
+        <property name="keyStorePassword" value="${activemq.broker.keystorePassword}"/>
+        <property name="trustStore" value="${activemq.broker.truststore}"/>
+        <property name="trustStorePassword" value="${activemq.broker.truststorePassword}"/>
     </bean>
-    <bean class="org.apache.activemq.pool.PooledConnectionFactory"
-        destroy-method="stop" id="pooledConnectionFactory"
-        init-method="start" primary="true">
-        <property name="maxConnections" value="${activemq.pool.max.connections}"/>
-        <property name="connectionFactory" ref="jmsConnectionFactory"/>
-    </bean>
-    <bean
-        class="org.apache.activemq.camel.component.ActiveMQConfiguration" id="jmsConfig">
-        <property name="connectionFactory" ref="pooledConnectionFactory"/>
-        <property name="concurrentConsumers" value="${activemq.concurrent.consumers}"/>
+    <bean class="org.apache.camel.component.jms.JmsConfiguration" id="jmsConfig">
+        <property name="connectionFactory" ref="jmsSslConnectionFactory"/>
+        <property name="concurrentConsumers" value="10"/>
     </bean>
     <bean class="org.apache.activemq.camel.component.ActiveMQComponent" id="activemq">
         <property name="configuration" ref="jmsConfig"/>
@@ -57,8 +49,7 @@
         destroy-method="destroy" id="initDatabase" init-method="create">
         <property name="dataSource" ref="dataSource"/>
     </bean>
-    <camelContext id="camelContext-26160249-d172-4e93-b6e6-69f35cc2da27" xmlns="http://camel.apache.org/schema/spring">
-        <propertyPlaceholder id="properties" location="routing.properties"/>
+    <camelContext id="transformation-and-cbr" xmlns="http://camel.apache.org/schema/spring">
         <!-- XML validation and transformation endpoint and dataformat -->
         <endpoint id="person2citizen" uri="dozer:person2citizen?sourceModel=generated.Person&amp;targetModel=generated.Citizen&amp;marshalId=generated&amp;unmarshalId=generated&amp;mappingFile=transformation.xml"/>
         <dataFormats>

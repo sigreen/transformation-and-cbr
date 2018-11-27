@@ -11,10 +11,3 @@ spec:
             limits:
               cpu: "1.0"
               memory: 512Mi
-          env:
-          - name: ACTIVEMQ_SERVICE_NAME
-            value: ${activemq.service.name}
-          - name: ACTIVEMQ_USERNAME
-            value: ${activemq.broker.username}
-          - name: ACTIVEMQ_PASSWORD
-            value: ${activemq.broker.password}

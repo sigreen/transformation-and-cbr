@@ -8,11 +8,16 @@ import org.apache.camel.ProducerTemplate;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.test.spring.CamelSpringTestSupport;
+import org.apache.camel.test.spring.DisableJmx;
 import org.junit.Test;
-import org.springframework.context.support.AbstractXmlApplicationContext;
+import org.junit.runner.RunWith;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
+import org.springframework.test.context.junit4.SpringRunner;
 
+@DisableJmx(true)
+@RunWith(SpringRunner.class)
 public class TransformationTest extends CamelSpringTestSupport {
+
     
     @EndpointInject(uri = "mock:person2citizen-test-output")
     private MockEndpoint resultEndpoint;
@@ -38,11 +43,11 @@ public class TransformationTest extends CamelSpringTestSupport {
             }
         };
     }
-    
-    @Override
-    protected AbstractXmlApplicationContext createApplicationContext() {
-        return new ClassPathXmlApplicationContext("META-INF/spring/camel-context.xml");
-    }
+       
+	@Override
+	protected ClassPathXmlApplicationContext createApplicationContext() {
+		return new ClassPathXmlApplicationContext("spring/camel-context.xml", "spring/test-properties-import.xml");
+	}
     
     private String readFile(String filePath) throws Exception {
         String content;
